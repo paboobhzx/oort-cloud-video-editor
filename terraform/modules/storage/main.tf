@@ -80,58 +80,68 @@ resource "aws_s3_bucket_versioning" "processed_videos" {
     }
 }
 #S3 Bucket Policy - Restrict access to VPC Endpoint only (security)
-resource "aws_s3_bucket_policy" "raw_videos" { 
-    bucket = aws_s3_bucket.raw_videos.id 
-    policy = jsonencode({ 
-        Version = "2012-10-17"
-        Statement = [ 
-            { 
-                Sid = "AllowVPCEndpointAccess"
-                Effect = "Allow"
-                Principal = "*"
-                Action = [ 
-                    "s3:GetObject",
-                    "s3:PutObject",
-                    "s3:DeleteObject",
-                    "s3:ListBucket"
-                ]
-                Resource = [ 
-                    aws_s3_bucket.raw_videos.arn ,
-                    "${aws_s3_bucket.raw_videos.arn}/*"
-                ]
-                Condition = { 
-                    StringEquals = { 
-                        "aws:SourceVpce" = var.vpc_endpoint_id 
-                    }
-                }
-            }
+resource "aws_s3_bucket_policy" "raw_videos" {
+  bucket = aws_s3_bucket.raw_videos.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowVPCEndpointAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
         ]
-    })
+        Resource = [
+          aws_s3_bucket.raw_videos.arn,
+          "${aws_s3_bucket.raw_videos.arn}/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:SourceVpce" = var.vpc_endpoint_id
+          }
+        }
+      }
+    ]
+  })
 }
-#S3 Bucket Policy for processed videos
-resource "aws_s3_bucket_policy" "processed_videos" { 
-    bucket = aws_s3_bucket.processed_videos.id 
-    policy = jsonencode({ 
-        Version = "2012-10-17",
-        Statement = [ 
-            { 
-                Sid = "AllowVPCEndpointAccess"
-                Effect = "Allow"
-                Principal = "*"
-                Action = [ 
-                    "s3:GetObject",
-                    "s3:PutObject",
-                    "s3:DeleteObject",
-                    "s3:ListBucket"
-                ]
-                Condition = { 
-                    StringEquals = { 
-                        "aws:SourceVpce" = var.vpc_endpoint_id
-                    }
-                }
-            }
+
+resource "aws_s3_bucket_policy" "processed_videos" {
+  bucket = aws_s3_bucket.processed_videos.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowVPCEndpointAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
         ]
-    })
+        Resource = [
+          aws_s3_bucket.processed_videos.arn,
+          "${aws_s3_bucket.processed_videos.arn}/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:SourceVpce" = var.vpc_endpoint_id
+          }
+        }
+      }
+    ]
+  })
 }
 #Enable server-side encryption (best practice, security, needed)
 resource "aws_s3_bucket_server_side_encryption_configuration" "raw_videos" { 

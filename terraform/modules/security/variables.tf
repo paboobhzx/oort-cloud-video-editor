@@ -14,6 +14,7 @@ variable "vpc_cidr" {
     description = "VPC CIDR Block"
     type = string 
 }
+
 variable "s3_bucket_arns" { 
     description = "List of S3 bucjket ARNs for IAM Policies"
     type = list(string)

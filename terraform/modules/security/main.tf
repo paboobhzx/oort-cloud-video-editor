@@ -128,7 +128,11 @@ resource "aws_iam_role_policy" "ec2_processor_policy" {
     ]
   })
 }
-
+# Allow EC2 instances to register with AWS Systems Manager (SSM)
+resource "aws_iam_role_policy_attachment" "ec2_processor_ssm" {
+  role       = aws_iam_role.ec2_processor.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
 #IAM Instace Profile for EC2
 resource "aws_iam_instance_profile" "ec2_processor" { 
     name = "${var.project_name}-${var.environment}-ec2-processor-profile"

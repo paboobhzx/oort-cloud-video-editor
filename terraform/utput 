@@ -1,0 +1,89 @@
+{
+    "QueueConfigurations": [
+        {
+            "Id": "tf-s3-queue-20260103215423356800000004",
+            "QueueArn": "arn:aws:sqs:us-east-1:288854271409:oort-cloud-video-editor-dev-video-jobs",
+            "Events": [
+                "s3:ObjectCreated:*"
+            ],
+            "Filter": {
+                "Key": {
+                    "FilterRules": [
+                        {
+                            "Name": "Suffix",
+                            "Value": ".mp4"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "Id": "tf-s3-queue-20260103215423356900000005",
+            "QueueArn": "arn:aws:sqs:us-east-1:288854271409:oort-cloud-video-editor-dev-video-jobs",
+            "Events": [
+                "s3:ObjectCreated:*"
+            ],
+            "Filter": {
+                "Key": {
+                    "FilterRules": [
+                        {
+                            "Name": "Suffix",
+                            "Value": ".avi"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "Id": "tf-s3-queue-20260103215423356900000006",
+            "QueueArn": "arn:aws:sqs:us-east-1:288854271409:oort-cloud-video-editor-dev-video-jobs",
+            "Events": [
+                "s3:ObjectCreated:*"
+            ],
+            "Filter": {
+                "Key": {
+                    "FilterRules": [
+                        {
+                            "Name": "Suffix",
+                            "Value": ".mov"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "Id": "tf-s3-queue-20260103215423356900000007",
+            "QueueArn": "arn:aws:sqs:us-east-1:288854271409:oort-cloud-video-editor-dev-video-jobs",
+            "Events": [
+                "s3:ObjectCreated:*"
+            ],
+            "Filter": {
+                "Key": {
+                    "FilterRules": [
+                        {
+                            "Name": "Suffix",
+                            "Value": ".webm"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "Id": "tf-s3-queue-20260103215423356900000008",
+            "QueueArn": "arn:aws:sqs:us-east-1:288854271409:oort-cloud-video-editor-dev-video-jobs",
+            "Events": [
+                "s3:ObjectCreated:*"
+            ],
+            "Filter": {
+                "Key": {
+                    "FilterRules": [
+                        {
+                            "Name": "Suffix",
+                            "Value": ".mkv"
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+}

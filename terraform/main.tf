@@ -61,18 +61,23 @@ module "load_balancer" {
     tags = var.tags 
 }
 #Compute Module
-module "compute" { 
-    source = "./modules/compute"
-    project_name = var.project_name
-    environment = var.environment
-    vpc_id = module.networking.vpc_id 
-    private_subnet_ids = module.networking.private_subnet_ids
-    security_group_id = module.security.ec2_processor_security_group_id 
-    iam_instance_profile_name = module.security.ec2_processor_instance_profile_name 
-    raw_videos_bucket_name = module.storage.raw_videos_bucket_name 
-    processed_videos_bucket_name = module.storage.processed_videos_bucket_name 
-    sqs_queue_url = module.storage.video_jobs_queue_url 
+module "compute" {
+  source = "./modules/compute"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  vpc_id             = module.networking.vpc_id
+  private_subnet_ids = module.networking.private_subnet_ids
+  security_group_id  = module.security.ec2_processor_security_group_id
+
+  iam_instance_profile_name = module.security.ec2_processor_instance_profile_name
+
+  raw_videos_bucket_name       = module.storage.raw_videos_bucket_name
+  processed_videos_bucket_name = module.storage.processed_videos_bucket_name
+  sqs_queue_url                = module.storage.video_jobs_queue_url
 }
+
 #Monitoring module
 module "monitoring" { 
     source = "./modules/monitoring"
@@ -81,6 +86,6 @@ module "monitoring" {
     environment = var.environment
     alb_arn_suffix = split("/", module.load_balancer.alb_arn)[1]
     target_group_arn_suffix = split(":", module.load_balancer.target_group_arn)[5]
-    sqs_queue_name            = split("/", module.storage.video_jobs_queue_url)[4]
+    sqs_queue_name = split("/", module.storage.video_jobs_queue_url)[4]
     tags = var.tags 
 }

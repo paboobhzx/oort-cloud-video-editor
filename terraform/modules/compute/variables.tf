@@ -18,10 +18,6 @@ variable "security_group_id" {
     description = "Security group ID for EC2 instances"
     type = string
 }
-variable "iam_instance_profile_name" { 
-    description = "IAM instance profile name for EC2"
-    type = string 
-}
 variable "raw_videos_bucket_name" { 
     description = "S3 bucket name for raw videos"
     type = string
@@ -63,4 +59,8 @@ variable "tags" {
     description = "Common tags"
     type = map(string)
     default = { }
+}
+variable "iam_instance_profile_name" {
+  description = "IAM instance profile name for EC2 video processors"
+  type        = string
 }
