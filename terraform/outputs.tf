@@ -73,3 +73,12 @@ output "next_steps" {
   To destroy: terraform destroy
   EOT
 }
+output "api_id" {
+  description = "HTTP API Gateway ID"
+  value       = module.api.api_id
+}
+
+output "api_endpoint" {
+  description = "HTTP API Gateway invoke URL"
+  value       = module.api.api_endpoint
+}

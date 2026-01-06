@@ -4,17 +4,21 @@ set -e
 ########################################
 # Basic system setup
 ########################################
-dnf update -y
+ARCH=$(uname -m)
 
 ########################################
-# Install jq (from Amazon Linux repo)
+# Install jq (from S3)
 ########################################
-dnf install -y jq
+if [ "$ARCH" = "x86_64" ]; then
+  aws s3 cp s3://${raw_videos_bucket}/dependencies/jq-amd64 /usr/local/bin/jq --region ${aws_region}
+elif [ "$ARCH" = "aarch64" ]; then
+  aws s3 cp s3://${raw_videos_bucket}/dependencies/jq-arm64 /usr/local/bin/jq --region ${aws_region}
+fi
+chmod +x /usr/local/bin/jq
 
 ########################################
 # Install ffmpeg (static, from S3)
 ########################################
-ARCH=$(uname -m)
 cd /tmp
 
 if [ "$ARCH" = "x86_64" ]; then
@@ -36,9 +40,10 @@ rm -rf /tmp/ffmpeg*
 # Application directory
 ########################################
 mkdir -p /opt/video-processor
+mkdir -p /var/log/video-processor
 
 ########################################
-# Environment file (THIS IS THE KEY FIX)
+# Environment file
 ########################################
 cat > /etc/video-processor.env <<EOF
 SQS_QUEUE_URL=${sqs_queue_url}
@@ -50,66 +55,12 @@ EOF
 chmod 600 /etc/video-processor.env
 
 ########################################
-# Worker script
+# Download worker scripts from S3
 ########################################
-cat > /opt/video-processor/worker.sh <<'EOF'
-#!/bin/bash
-set -euo pipefail
+aws s3 cp s3://${raw_videos_bucket}/scripts/ffmpeg_runner.sh /opt/video-processor/ffmpeg_runner.sh --region ${aws_region}
+aws s3 cp s3://${raw_videos_bucket}/scripts/worker.sh /opt/video-processor/worker.sh --region ${aws_region}
 
-echo "$(date): Worker started"
-
-while true; do
-  MESSAGE=$(aws sqs receive-message \
-    --queue-url "$SQS_QUEUE_URL" \
-    --max-number-of-messages 1 \
-    --wait-time-seconds 20 \
-    --visibility-timeout 1800 \
-    --region "$AWS_REGION")
-
-  RECEIPT=$(echo "$MESSAGE" | jq -r '.Messages[0].ReceiptHandle // empty')
-  BODY=$(echo "$MESSAGE" | jq -r '.Messages[0].Body // empty')
-
-  if [ -z "$RECEIPT" ]; then
-    sleep 5
-    continue
-  fi
-
-  EVENT=$(echo "$BODY" | jq -r '.Event // empty')
-  if [ "$EVENT" = "s3:TestEvent" ]; then
-    aws sqs delete-message \
-      --queue-url "$SQS_QUEUE_URL" \
-      --receipt-handle "$RECEIPT" \
-      --region "$AWS_REGION"
-    continue
-  fi
-
-  KEY=$(echo "$BODY" | jq -r '.Records[0].s3.object.key // empty')
-  if [ -z "$KEY" ]; then
-    aws sqs delete-message \
-      --queue-url "$SQS_QUEUE_URL" \
-      --receipt-handle "$RECEIPT" \
-      --region "$AWS_REGION"
-    continue
-  fi
-
-KEY=$(printf '%b' "$${KEY//%/\\x}")
-
-  WORKDIR="/tmp/job-$(date +%s)"
-  mkdir -p "$WORKDIR"
-
-  aws s3 cp "s3://$RAW_BUCKET/$KEY" "$WORKDIR/input.mp4" --region "$AWS_REGION"
-  cp "$WORKDIR/input.mp4" "$WORKDIR/output.mp4"
-  aws s3 cp "$WORKDIR/output.mp4" "s3://$PROCESSED_BUCKET/processed-$(basename "$KEY")" --region "$AWS_REGION"
-
-  aws sqs delete-message \
-    --queue-url "$SQS_QUEUE_URL" \
-    --receipt-handle "$RECEIPT" \
-    --region "$AWS_REGION"
-
-  rm -rf "$WORKDIR"
-done
-EOF
-
+chmod +x /opt/video-processor/ffmpeg_runner.sh
 chmod +x /opt/video-processor/worker.sh
 
 ########################################
@@ -127,6 +78,8 @@ EnvironmentFile=/etc/video-processor.env
 ExecStart=/opt/video-processor/worker.sh
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

@@ -17,6 +17,9 @@ output "ec2_processor_instance_profile_name" {
   description = "Name of the EC2 processor instance profile"
   value       = aws_iam_instance_profile.ec2_processor.name
 }
+output "cognito_user_pool_issuer_url" { 
+  value = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+}
 
 output "cognito_user_pool_id" {
   description = "ID of the Cognito User Pool"

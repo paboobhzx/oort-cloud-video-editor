@@ -30,3 +30,8 @@ variable "tags" {
     type = map(string)
     default = { }
 }
+variable "aws_region" { 
+    type = string
+    description = "AWS region (used for Cognito issuer URL)"
+}
+variable "processed_video_bucket_arn" {}

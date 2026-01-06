@@ -44,10 +44,16 @@ module "security" {
     source = "./modules/security"
     project_name = var.project_name 
     environment = var.environment
+    aws_region = var.aws_region 
+
     vpc_id = module.networking.vpc_id
     vpc_cidr = module.networking.vpc_cidr
+
     s3_bucket_arns = module.storage.s3_bucket_arns 
     sqs_queue_arn = module.storage.video_jobs_queue_arn 
+
+    processed_video_bucket_arn  = module.storage.processed_videos_bucket_arn
+
     tags = var.tags 
 }
 #Load balancer  module
@@ -88,4 +94,27 @@ module "monitoring" {
     target_group_arn_suffix = split(":", module.load_balancer.target_group_arn)[5]
     sqs_queue_name = split("/", module.storage.video_jobs_queue_url)[4]
     tags = var.tags 
+}
+#Api Module (HTTP API + Lambdas)
+module "api" { 
+    source = "./modules/api"
+    project_name = var.project_name
+    environment = var.environment
+    allowed_origins = var.allowed_origins
+
+    #Storage
+    raw_videos_bucket_name = module.storage.raw_videos_bucket_name
+    raw_videos_bucket_arn = module.storage.raw_videos_bucket_arn
+    processed_videos_bucket_name = module.storage.processed_videos_bucket_name
+    processed_video_bucket_arn = module.storage.processed_videos_bucket_arn
+
+    #Queue
+    sqs_queue_url = module.storage.video_jobs_queue_url
+    sqs_queue_arn = module.storage.video_jobs_queue_arn 
+
+    #Cognito (JWT Authorizer)
+    cognito_issuer_url = module.security.cognito_user_pool_issuer_url 
+    cognito_client_id = module.security.cognito_user_pool_client_id 
+
+  
 }
