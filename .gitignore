@@ -1,37 +1,66 @@
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-.terraform.lock.hcl
-terraform.tfvars
-*.tfvars
-crash.log
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-
-# AWS credentials
-.aws/
-*.pem
-*.key
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
+############################
+# OS / Editor
+############################
 .DS_Store
 Thumbs.db
-
-# Node (for Angular later)
-node_modules/
-dist/
+*.swp
+*.swo
 *.log
+*.tmp
+.vscode/
+.idea/
 
-# Environment variables
+############################
+# Node / Angular
+############################
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/.cache/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+############################
+# Terraform
+############################
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfstate.*
+terraform/crash.log
+terraform/override.tf
+terraform/override.tf.json
+terraform/*_override.tf
+terraform/*_override.tf.json
+
+############################
+# Environment / Secrets
+############################
 .env
-.env.local
+.env.*
+*.pem
+*.key
+*.crt
+
+############################
+# Media / Assets
+############################
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+############################
+# Build / Artifacts
+############################
+dist/
+build/
+out/
+
+############################
+# Misc
+############################
+coverage/
+logs/

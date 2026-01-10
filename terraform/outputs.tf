@@ -82,3 +82,7 @@ output "api_endpoint" {
   description = "HTTP API Gateway invoke URL"
   value       = module.api.api_endpoint
 }
+output "api_base_url" { 
+  description = "Public API base URL"
+  value = module.api.api_invoke_url
+}

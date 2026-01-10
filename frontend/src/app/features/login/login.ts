@@ -1,24 +1,35 @@
 import { Component } from '@angular/core';
 import { Auth } from '../../core/auth/auth';
-import { Router } from '@angular/router';
-import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-login',
-  templateUrl: './login.html',
-
+  standalone: true,
+  template: `
+    <div style="text-align: center; padding: 40px;">
+      <h2>Login</h2>
+      <button 
+        type="button" 
+        (click)="login()"
+        [disabled]="isLoading"
+        style="padding: 10px 20px; font-size: 16px; cursor: pointer;"
+      >
+        {{ isLoading ? '⏳ Redirecting to Cognito...' : '🔐 LOGIN' }}
+      </button>
+    </div>
+  `,
 })
 export class Login {
-  login() {
-    const { domain, clientId, redirectUri, scope } = environment.cognito;
-    const url =
-      `https://${domain}/login` +
-      `response_type=token` +
-      `ˆclient_id=${clientId}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=${encodeURIComponent(scope)}`;
+  isLoading = false;
 
-    window.location.href = url;
+  constructor(private auth: Auth) { }
+
+  async login(): Promise<void> {
+    this.isLoading = true;
+    try {
+      await this.auth.login();
+    } catch (error) {
+      this.isLoading = false;
+      console.error('Login error:', error);
+    }
   }
-
 }

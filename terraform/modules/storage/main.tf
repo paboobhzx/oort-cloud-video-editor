@@ -160,3 +160,44 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "processed_videos"
         }
     }
 }
+#CORS Configuration for raw videos bucket (allow browser uploads from localhost)
+resource "aws_s3_bucket_cors_configuration" "raw_videos" { 
+  bucket = aws_s3_bucket.raw_videos.id
+
+  cors_rule { 
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "POST", "GET", "DELETE", "HEAD"]
+    allowed_origins = [
+      "http://localhost:4200",    # Angular dev server
+      "http://localhost:3000",    # Alternative dev port
+      "http://localhost:8080",    # Another common dev port
+    ]
+    expose_headers = [ 
+      "Etag",
+      "x-amz-version-id",
+      "x-amz-request-id",
+      "x-amz-server-side-encryption"
+    ]
+    max_age_seconds = 3000
+  }
+}
+#CORS configuration for processed videos bucket (allow downloads)
+resource "aws_s3_bucket_cors_configuration" "processed_videos" { 
+  bucket = aws_s3_bucket.processed_videos.id 
+
+  cors_rule { 
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+     allowed_origins = [
+      "http://localhost:4200",
+      "http://localhost:3000",
+      "http://localhost:8080",
+    ]
+    expose_headers = [
+      "ETag",
+      "x-amz-version-id",
+      "x-amz-request-id"
+    ]
+    max_age_seconds = 3000
+  }
+}
