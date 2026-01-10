@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, output } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -8,7 +8,10 @@ import { Auth } from '../../core/auth/auth';
 interface UploadResponse {
   upload_url: string;
   key: string;
+  preview_url: string;
 }
+
+
 
 interface JobResponse {
   job_id: string;
@@ -26,504 +29,384 @@ interface StatusResponse {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
+  <h1>Video Upload & Processing</h1>
+
     <div class="container">
       <h1>Video Upload & Processing</h1>
 
-      <!-- Debug Info -->
-      <section class="debug-section">
-        <h3>🔍 Debug Info</h3>
-        <p><strong>API Base URL:</strong> {{ environment.api.baseUrl }}</p>
-        <p><strong>Has Token:</strong> {{ hasToken ? '✅ Yes' : '❌ No' }}</p>
-        <button (click)="toggleDebug()" class="btn btn-debug">
-          {{ showDebug ? '🔓 Hide Debug' : '🔒 Show Debug' }}
-        </button>
-        <pre *ngIf="showDebug" class="debug-info">{{ debugInfo | json }}</pre>
-      </section>
-
       <!-- Step 1: Upload Video -->
-      <section *ngIf="!jobId" class="upload-section">
+      <section *ngIf="!uploadedKey">
         <h2>Step 1: Upload Video</h2>
-        
-        <div class="file-input-wrapper">
-          <input 
-            type="file" 
-            #fileInput
-            accept="video/*"
-            (change)="onFileSelected($event)"
-            [disabled]="isUploading"
-          />
-          <p *ngIf="selectedFile">📁 {{ selectedFile.name }} ({{ (selectedFile.size / 1024 / 1024).toFixed(2) }} MB)</p>
-        </div>
 
-        <button 
-          (click)="uploadVideo()" 
-          [disabled]="!selectedFile || isUploading"
-          class="btn btn-primary"
-        >
+        <input type="file" accept="video/*" (change)="onFileSelected($event)" [disabled]="isUploading" />
+        <p *ngIf="selectedFile">
+          📁 {{ selectedFile.name }} ({{ (selectedFile.size / 1024 / 1024).toFixed(2) }} MB)
+        </p>
+
+        <button class="btn btn-primary" (click)="uploadVideo()" [disabled]="!selectedFile || isUploading">
           {{ isUploading ? '⏳ Uploading...' : '📤 Upload Video' }}
         </button>
 
-        <p *ngIf="uploadError" class="error">❌ {{ uploadError }}</p>
         <p *ngIf="uploadProgress > 0 && uploadProgress < 100" class="progress">
-          ⏸️ Upload progress: {{ uploadProgress }}%
+          Upload progress: {{ uploadProgress }}%
         </p>
+
+        <p *ngIf="uploadError" class="error">{{ uploadError }}</p>
       </section>
 
       <!-- Step 2: Submit Job -->
-      <section *ngIf="selectedFile && !jobId" class="job-section">
-        <h2>Step 2: Submit Processing Job</h2>
-        
-        <div class="form-group">
-          <label>Processing Operation:</label>
-          <select [(ngModel)]="operation">
-            <option value="1">Resize to 720p</option>
-            <option value="2">Resize to 480p</option>
-            <option value="3">Extract thumbnail</option>
-          </select>
+      <!-- Persistent Preview -->
+<div *ngIf="previewUrl" class="preview">
+  <h3>Uploaded Video Preview</h3>
+
+  <video
+    [src]="previewUrl"
+    controls
+    preload="metadata"
+    width="100%"
+    (loadedmetadata)="onVideoMetaData($event)">
+  </video>
+
+  <p class="muted" *ngIf="videoDuration">
+    Duration: {{ videoDuration | number:'1.0-1' }}s |
+    📐 Resolution: {{ videoWidth }}×{{ videoHeight }}
+  </p>
+</div>
+
+<!-- Step 2: Submit Job -->
+<section *ngIf="uploadedKey && !jobId">
+  <h2>Step 2: Submit Processing Job</h2>
+
+  <label>Operation:</label>
+  <select [(ngModel)]="operation">
+    <option value="1">Resize to 720p</option>
+    <option value="2">Resize to 480p</option>
+    <option value="3">Extract thumbnail</option>
+  </select>
+
+  <button class="btn btn-primary"
+          (click)="submitJob()"
+          [disabled]="isSubmitting">
+    {{ isSubmitting ? '⏳ Submitting...' : '🚀 Submit Job' }}
+  </button>
+
+  <p *ngIf="jobError" class="error">{{ jobError }}</p>
+</section>
+
+      <!-- Step 3: Processing -->
+      <section *ngIf="jobId">
+        <h2>Step 3: Processing Status</h2>
+
+        <p><strong>Job ID:</strong> {{ jobId }}</p>
+
+        <!-- 🔄 Processing UX -->
+        <div *ngIf="jobStatus === 'processing'" class="processing">
+          <div class="spinner"></div>
+          <p>⚙️ Processing your video…</p>
+          <p class="muted">
+            This may take a few minutes depending on the video.
+          </p>
+          <p class="muted">
+            ⏱️ Time elapsed: {{ processingSeconds }}s
+          </p>
+
+          <button class="btn btn-secondary" disabled>
+            🔄 Processing…
+          </button>
         </div>
 
-        <button 
-          (click)="submitJob()" 
-          [disabled]="!uploadedKey || isSubmitting"
-          class="btn btn-primary"
-        >
-          {{ isSubmitting ? '⏳ Submitting...' : '🚀 Submit Job' }}
-        </button>
-
-        <p *ngIf="jobError" class="error">❌ {{ jobError }}</p>
-      </section>
-
-      <!-- Step 3: Monitor Job -->
-      <section *ngIf="jobId" class="status-section">
-        <h2>Step 3: Processing Status</h2>
-        
-        <p><strong>Job ID:</strong> {{ jobId }}</p>
-        <p *ngIf="!isProcessed"><strong>Status:</strong> {{ jobStatus }}</p>
-
-        <button 
-          (click)="checkStatus()" 
-          [disabled]="isProcessed || isChecking"
-          class="btn btn-secondary"
-        >
-          {{ isChecking ? '🔄 Checking...' : '🔍 Check Status' }}
-        </button>
-
-        <p *ngIf="jobError" class="error">❌ {{ jobError }}</p>
-
+        <!-- ✅ Completed -->
         <div *ngIf="isProcessed" class="success">
           <p>✅ Video processed successfully!</p>
-          <a [href]="downloadUrl" target="_blank" class="btn btn-download">
-            📥 Download Processed Video
-          </a>
+          <button
+  class="btn btn-download"
+  (click)="downloadProcessedVideo()"
+>
+  📥 Download Video
+</button>
+
         </div>
 
+        <!-- ❌ Failed -->
         <div *ngIf="jobStatus === 'failed'" class="error">
-          <p>❌ Processing failed. Please try again.</p>
-          <button (click)="reset()" class="btn btn-secondary">Start Over</button>
+          <p>❌ Processing failed.</p>
+          <button class="btn btn-secondary" (click)="reset()">Start Over</button>
         </div>
       </section>
 
-      <!-- Logout -->
       <footer>
-        <button (click)="logout()" class="btn btn-logout">🚪 Logout</button>
+        <button class="btn btn-logout" (click)="logout()">🚪 Logout</button>
       </footer>
     </div>
   `,
   styles: [`
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
+    .container { max-width: 800px; margin: auto; padding: 20px; }
+    section { border: 1px solid #ddd; padding: 20px; margin-top: 20px; border-radius: 8px; background: #f9f9f9; }
+    .btn { padding: 10px 16px; margin-top: 10px; }
+    .btn-primary { background: #007bff; color: #fff; }
+    .btn-secondary { background: #6c757d; color: #fff; }
+    .btn-download { background: #28a745; color: #fff; }
+    .btn-logout { background: #dc3545; color: #fff; }
+    .error { background: #f8d7da; padding: 10px; border-radius: 4px; margin-top: 10px; }
+    .success { background: #d4edda; padding: 10px; border-radius: 4px; margin-top: 10px; }
+    .progress { background: #cce5ff; padding: 10px; border-radius: 4px; }
 
-    h1 {
-      color: #333;
+    .processing {
       text-align: center;
+      margin-top: 20px;
     }
 
-    section {
-      margin: 30px 0;
-      padding: 20px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #f9f9f9;
+    .spinner {
+      margin: 20px auto;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #ddd;
+      border-top: 4px solid #007bff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
     }
 
-    h2 {
-      color: #555;
-      font-size: 18px;
-      margin-top: 0;
-    }
-
-    h3 {
-      color: #555;
-      font-size: 16px;
-    }
-
-    .file-input-wrapper {
-      margin: 15px 0;
-    }
-
-    input[type="file"] {
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      cursor: pointer;
-      width: 100%;
-    }
-
-    input[type="file"]:disabled {
-      background: #eee;
-      cursor: not-allowed;
-    }
-
-    .form-group {
-      margin: 15px 0;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: bold;
-    }
-
-    select {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    .btn {
-      padding: 10px 20px;
-      margin: 10px 5px 10px 0;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
+    .muted {
+      color: #666;
       font-size: 14px;
-      font-weight: 500;
     }
 
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .btn-primary {
-      background: #007bff;
-      color: white;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: #0056b3;
-    }
-
-    .btn-secondary {
-      background: #6c757d;
-      color: white;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: #545b62;
-    }
-
-    .btn-download {
-      background: #28a745;
-      color: white;
-    }
-
-    .btn-download:hover {
-      background: #218838;
-    }
-
-    .btn-logout {
-      background: #dc3545;
-      color: white;
-    }
-
-    .btn-logout:hover {
-      background: #c82333;
-    }
-
-    .btn-debug {
-      background: #666;
-      color: white;
-      font-size: 12px;
-    }
-
-    .error {
-      color: #dc3545;
-      padding: 10px;
-      background: #f8d7da;
-      border: 1px solid #f5c6cb;
-      border-radius: 4px;
-      margin: 10px 0;
-    }
-
-    .success {
-      color: #155724;
-      padding: 10px;
-      background: #d4edda;
-      border: 1px solid #c3e6cb;
-      border-radius: 4px;
-      margin: 10px 0;
-    }
-
-    .progress {
-      color: #004085;
-      padding: 10px;
-      background: #cce5ff;
-      border: 1px solid #b8daff;
-      border-radius: 4px;
-      margin: 10px 0;
-    }
-
-    .debug-info {
-      background: #000;
-      color: #0f0;
-      padding: 10px;
-      border-radius: 4px;
-      overflow-x: auto;
-      font-size: 12px;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-
-    .debug-section {
-      margin-top: 30px;
-      background: #f0f0f0;
-    }
-
-    footer {
-      margin-top: 40px;
-      text-align: center;
-      border-top: 1px solid #ddd;
-      padding-top: 20px;
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   `]
 })
 export class Upload implements OnInit {
-  // File upload
+
+  pendingPreviewUrl = '';
+  processedKey = '';
+
+
+  processingStartedAt: number | null = null;
+  processingSeconds = 0;
+  processingTimer?: any;
+  isChecking = false;
+
   selectedFile: File | null = null;
-  isUploading = false;
+  uploadedKey = '';
   uploadProgress = 0;
   uploadError = '';
-  uploadedKey = '';
+  isUploading = false;
 
-  // Job submission
   operation = '1';
   isSubmitting = false;
   jobError = '';
 
-  // Job status
   jobId = '';
-  jobStatus = 'processing';
+  jobStatus: 'processing' | 'completed' | 'failed' = 'processing';
   isProcessed = false;
   downloadUrl = '';
-  isChecking = false;
 
-  // Debug
-  showDebug = false;
-  debugInfo: any = {};
-  hasToken = false;
-  environment = environment;
+  //Preview state
+  previewUrl = '';
+  videoDuration = 0;
+  videoWidth = 0;
+  videoHeight = 0;
+
+
 
   constructor(
     private http: HttpClient,
-    private auth: Auth
+    private auth: Auth,
+    private cdr: ChangeDetectorRef
   ) { }
 
-  ngOnInit(): void {
-    this.hasToken = this.auth.isAuthenticated();
-    this.updateDebugInfo();
-  }
+  ngOnInit(): void { }
 
   onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const files = input.files;
+    this.selectedFile = input.files?.[0] || null;
+  }
+  onVideoMetaData(event: Event): void {
+    const video = event.target as HTMLVideoElement;
 
-    if (files && files.length > 0) {
-      this.selectedFile = files[0];
-      this.uploadError = '';
-      this.updateDebugInfo();
-    }
+    this.videoDuration = video.duration;
+    this.videoWidth = video.videoWidth;
+    this.videoHeight = video.videoHeight;
+
+    this.cdr.detectChanges();
   }
 
   uploadVideo(): void {
-    if (!this.selectedFile) {
-      this.uploadError = 'Please select a file';
-      return;
-    }
+    if (!this.selectedFile) return;
 
     this.isUploading = true;
-    this.uploadError = '';
     this.uploadProgress = 0;
 
-    console.log('📤 Requesting presigned upload URL from:', `${environment.api.baseUrl}/upload`);
-
-    // Step 1: Get presigned upload URL from API
     this.http.post<UploadResponse>(`${environment.api.baseUrl}/upload`, {
-      filename: this.selectedFile.name,
+      filename: this.selectedFile.name
     }).subscribe({
-      next: (response) => {
-        console.log('✅ Got presigned upload URL:', response.upload_url);
-        this.uploadedKey = response.key;
-        this.uploadToS3(response.upload_url);
+      next: res => {
+        this.uploadedKey = res.key;
+        this.pendingPreviewUrl = res.preview_url;
+        this.uploadToS3(res.upload_url);
       },
-      error: (err) => {
-        console.error('❌ Failed to get upload URL:', err);
-        const errorMsg = err.error?.message || err.message || 'Unknown error';
-        this.uploadError = `Failed to get upload URL: ${errorMsg}`;
+      error: err => {
+        this.uploadError = err.message || 'Upload failed';
         this.isUploading = false;
-        this.updateDebugInfo();
       }
     });
   }
 
-  private uploadToS3(presignedUrl: string): void {
-    // Step 2: Upload file directly to S3 using presigned URL
+  private uploadToS3(url: string): void {
     const xhr = new XMLHttpRequest();
 
-    xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable) {
-        this.uploadProgress = Math.round((event.loaded / event.total) * 100);
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) {
+        this.uploadProgress = Math.round((e.loaded / e.total) * 100);
+        this.cdr.detectChanges();
       }
-    });
+    };
 
-    xhr.addEventListener('load', () => {
+    xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        console.log('✅ File uploaded to S3 successfully');
         this.isUploading = false;
-        this.uploadProgress = 100;
-        this.updateDebugInfo();
+        this.previewUrl = this.pendingPreviewUrl;
+        this.pendingPreviewUrl = '';
+        this.cdr.detectChanges();
       } else {
-        console.error('❌ S3 upload failed:', xhr.status, xhr.statusText);
-        this.uploadError = `Upload failed: ${xhr.statusText} (${xhr.status})`;
+        this.uploadError = 'S3 upload failed';
         this.isUploading = false;
-        this.updateDebugInfo();
       }
-    });
 
-    xhr.addEventListener('error', () => {
-      console.error('❌ Upload error');
-      this.uploadError = 'Upload error. Check console for details.';
+    };
+
+    xhr.onerror = () => {
+      this.uploadError = 'Upload error';
       this.isUploading = false;
-      this.updateDebugInfo();
-    });
+      this.cdr.detectChanges();
+    };
 
-    xhr.open('PUT', presignedUrl);
+    xhr.open('PUT', url);
     xhr.setRequestHeader('Content-Type', this.selectedFile!.type);
     xhr.send(this.selectedFile);
   }
 
   submitJob(): void {
-    if (!this.uploadedKey) {
-      this.jobError = 'Please upload a video first';
-      return;
-    }
-
     this.isSubmitting = true;
-    this.jobError = '';
+    this.processingStartedAt = Date.now();
+    this.processingSeconds = 0;
 
-    console.log('🚀 Submitting job:', { input_key: this.uploadedKey, operation: this.operation });
+    this.processingTimer = setInterval(() => {
+      this.processingSeconds = Math.floor(
+        (Date.now() - (this.processingStartedAt as number)) / 1000
+      );
+      this.cdr.detectChanges();
+    }, 1000);
+
 
     this.http.post<JobResponse>(`${environment.api.baseUrl}/job`, {
       input_key: this.uploadedKey,
-      operation: parseInt(this.operation),
+      operation: parseInt(this.operation)
     }).subscribe({
-      next: (response) => {
-        console.log('✅ Job submitted:', response.job_id);
-        this.jobId = response.job_id;
+      next: res => {
+        this.jobId = res.job_id;
+        this.downloadUrl = res.output_key;
+        this.processedKey = res.output_key;
         this.jobStatus = 'processing';
         this.isSubmitting = false;
-        this.updateDebugInfo();
-        // Auto-check status after a delay
+        this.processedKey = res.output_key;
+
+        this.processingStartedAt = Date.now();
+        this.processingTimer = setInterval(() => {
+          this.processingSeconds = Math.floor((Date.now() - (this.processingStartedAt as number)) / 1000);
+          this.cdr.detectChanges();
+        }, 1000);
+
         setTimeout(() => this.checkStatus(), 2000);
       },
-      error: (err) => {
-        console.error('❌ Failed to submit job:', err);
-        const errorMsg = err.error?.message || err.message || 'Unknown error';
-        this.jobError = `Failed to submit job: ${errorMsg}`;
+      error: err => {
+        this.jobError = err.message || 'Job submission failed';
         this.isSubmitting = false;
-        this.updateDebugInfo();
       }
     });
   }
 
   checkStatus(): void {
-    if (!this.jobId) return;
+    if (this.isChecking || !this.jobId) return;
 
     this.isChecking = true;
-    this.jobError = '';
 
-    console.log('🔍 Checking job status:', this.jobId);
 
     this.http.get<StatusResponse>(`${environment.api.baseUrl}/status`, {
-      params: { job_id: this.jobId }
+      params: { job_id: this.jobId, output_key: this.downloadUrl }
     }).subscribe({
-      next: (response) => {
-        console.log('✅ Status check:', response.status);
-        this.jobStatus = response.status;
-
-        if (response.status === 'completed' && response.download_url) {
+      next: res => {
+        this.jobStatus = res.status;
+        if (res.status === 'completed') {
+          this.jobStatus = 'completed'
           this.isProcessed = true;
-          this.downloadUrl = response.download_url;
-        } else if (response.status === 'failed') {
-          this.jobError = response.error || 'Processing failed';
-        } else if (response.status === 'processing') {
-          // Keep polling
+          clearInterval(this.processingTimer);
+        }
+
+        if (res.status === 'failed') {
+          clearInterval(this.processingTimer);
+          this.jobError = res.error || 'Processing failed';
+        }
+
+
+        if (res.status === 'completed') {
+          this.isProcessed = true;
+          clearInterval(this.processingTimer);
+        }
+
+        if (res.status === 'failed') {
+          clearInterval(this.processingTimer);
+          this.jobError = res.error || 'Processing failed';
+        }
+
+        if (res.status === 'processing') {
           setTimeout(() => this.checkStatus(), 3000);
         }
 
         this.isChecking = false;
-        this.updateDebugInfo();
+        this.cdr.detectChanges();
       },
-      error: (err) => {
-        console.error('❌ Status check failed:', err);
-        const errorMsg = err.error?.message || err.message || 'Unknown error';
-        this.jobError = `Failed to check status: ${errorMsg}`;
+      error: () => {
         this.isChecking = false;
-        this.updateDebugInfo();
       }
     });
   }
 
-  logout(): void {
-    this.auth.logout();
-  }
-
   reset(): void {
+    clearInterval(this.processingTimer);
     this.selectedFile = null;
     this.uploadedKey = '';
     this.jobId = '';
     this.jobStatus = 'processing';
     this.isProcessed = false;
-    this.downloadUrl = '';
-    this.uploadProgress = 0;
-    this.uploadError = '';
-    this.jobError = '';
-    this.updateDebugInfo();
+    this.processingSeconds = 0;
   }
 
-  toggleDebug(): void {
-    this.showDebug = !this.showDebug;
-  }
 
-  private updateDebugInfo(): void {
-    const token = this.auth.getToken();
-    this.debugInfo = {
-      apiBaseUrl: environment.api.baseUrl,
-      selectedFile: this.selectedFile ? {
-        name: this.selectedFile.name,
-        size: this.selectedFile.size,
-        type: this.selectedFile.type
-      } : null,
-      uploadedKey: this.uploadedKey,
-      jobId: this.jobId,
-      jobStatus: this.jobStatus,
-      hasToken: !!token,
-      tokenLength: token?.length || 0,
-    };
+  logout(): void {
+    clearInterval(this.processingTimer);
+    this.auth.logout();
+  }
+  downloadProcessedVideo(): void {
+    console.log('Downloading key:', this.processedKey);
+    if (!this.processedKey) return;
+
+    this.http.get<{ download_url: string }>(
+      `${environment.api.baseUrl}/download`,
+      {
+        params: {
+          output_key: this.processedKey
+        }
+      }
+    ).subscribe({
+      next: res => {
+        window.location.href = res.download_url;
+      },
+      error: err => {
+        console.error('Download failed ', err)
+        alert('Failed to download the video')
+      }
+    })
   }
 }

@@ -1,5 +1,18 @@
 #!/bin/bash
-set -e
+#set -e
+
+# Log everything
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+set -x
+
+echo "===== USER DATA START $(date) ====="
+
+echo "Ensuring SSM agent is running..."
+systemctl enable amazon-ssm-agent
+systemctl restart amazon-ssm-agent
+
+sleep 10
+systemctl status amazon-ssm-agent --no-pager || true
 
 ########################################
 # Basic system setup
@@ -23,15 +36,17 @@ cd /tmp
 
 if [ "$ARCH" = "x86_64" ]; then
   aws s3 cp s3://${raw_videos_bucket}/dependencies/ffmpeg-amd64.tar.xz ffmpeg.tar.xz --region ${aws_region}
+  tar xf ffmpeg.tar.xz
+  cd ffmpeg-*-amd64-static
 elif [ "$ARCH" = "aarch64" ]; then
   aws s3 cp s3://${raw_videos_bucket}/dependencies/ffmpeg-arm64.tar.xz ffmpeg.tar.xz --region ${aws_region}
+  tar xf ffmpeg.tar.xz
+  cd ffmpeg-*-arm64-static
 else
   echo "Unsupported architecture: $ARCH"
   exit 1
 fi
 
-tar xf ffmpeg.tar.xz
-cd ffmpeg-git-*-static
 install -m 0755 ffmpeg ffprobe /usr/local/bin/
 cd /
 rm -rf /tmp/ffmpeg*

@@ -26,6 +26,14 @@ def handler (event, context):
             },
             ExpiresIn=600
         )
+        preview_url = s3_client.generate_presigned_url( 
+            'get_object',
+            Params={ 
+                'Bucket': BUCKET,
+                'Key': key
+            },
+            ExpiresIn=3600
+        )
         return { 
             'statusCode': 200,
             'headers': { 
@@ -35,7 +43,8 @@ def handler (event, context):
             'body': json.dumps({ 
                 'upload_url': presigned_url,
                 'key': key,
-                'expires_in': 600
+                'expires_in': 600,
+                'preview_url': preview_url
             })
         }
     except Exception as e: 

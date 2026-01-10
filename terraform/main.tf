@@ -82,6 +82,9 @@ module "compute" {
   raw_videos_bucket_name       = module.storage.raw_videos_bucket_name
   processed_videos_bucket_name = module.storage.processed_videos_bucket_name
   sqs_queue_url                = module.storage.video_jobs_queue_url
+  raw_videos_bucket_arn      = module.storage.raw_videos_bucket_arn
+  processed_video_bucket_arn = module.storage.processed_videos_bucket_arn
+  sqs_queue_arn = module.storage.video_jobs_queue_arn
 }
 
 #Monitoring module
@@ -108,6 +111,10 @@ module "api" {
     processed_videos_bucket_name = module.storage.processed_videos_bucket_name
     processed_video_bucket_arn = module.storage.processed_videos_bucket_arn
 
+    #Lambda subnets
+    private_subnet_ids = module.networking.private_subnet_ids 
+    vpc_id = module.networking.vpc_id 
+    tags = var.tags
     #Queue
     sqs_queue_url = module.storage.video_jobs_queue_url
     sqs_queue_arn = module.storage.video_jobs_queue_arn 

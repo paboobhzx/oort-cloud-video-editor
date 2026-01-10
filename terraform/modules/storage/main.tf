@@ -172,12 +172,16 @@ resource "aws_s3_bucket_cors_configuration" "raw_videos" {
       "http://localhost:3000",    # Alternative dev port
       "http://localhost:8080",    # Another common dev port
     ]
-    expose_headers = [ 
-      "Etag",
-      "x-amz-version-id",
-      "x-amz-request-id",
-      "x-amz-server-side-encryption"
-    ]
+    expose_headers = [
+  "Etag",
+  "x-amz-version-id",
+  "x-amz-request-id",
+  "x-amz-server-side-encryption",
+  "Accept-Ranges",
+  "Content-Range",
+  "Content-Length"
+]
+
     max_age_seconds = 3000
   }
 }

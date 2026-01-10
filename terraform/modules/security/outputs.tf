@@ -45,3 +45,7 @@ output "cognito_user_pool_endpoint" {
   description = "Endpoint of the Cognito User Pool"
   value       = aws_cognito_user_pool.main.endpoint
 }
+output "cognito_domain_url" { 
+  description = "Full Cognito Domain URL"
+  value = "https://${aws_cognito_user_pool_domain.main.domain}.auth${data.aws_region.current.name}.amazoncognito.com"
+}

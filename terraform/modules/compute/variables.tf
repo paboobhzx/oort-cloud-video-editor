@@ -64,3 +64,17 @@ variable "iam_instance_profile_name" {
   description = "IAM instance profile name for EC2 video processors"
   type        = string
 }
+variable "raw_videos_bucket_arn" {
+  description = "ARN of raw videos S3 bucket"
+  type        = string
+}
+
+variable "processed_video_bucket_arn" {
+  description = "ARN of processed videos S3 bucket"
+  type        = string
+}
+
+variable "sqs_queue_arn" {
+  description = "ARN of SQS queue"
+  type        = string
+}

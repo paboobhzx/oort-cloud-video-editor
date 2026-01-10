@@ -1,63 +1,44 @@
 import json
 import boto3
 import os
+from botocore.exceptions import ClientError
 
-s3_client = boto3.client("s3", region_name=os.environ["REGION"])
+s3 = boto3.client("s3", region_name=os.environ["REGION"])
 BUCKET = os.environ["PROCESSED_BUCKET"]
 
 def handler(event, context):
-    """Check if processed file exists in S3"""
+    params = event.get("queryStringParameters") or {}
+    output_key = params.get("output_key")
+
+    if not output_key:
+        return response(400, {"error": "Missing output_key"})
+
     try:
-        query_params = event.get("queryStringParameters") or {}
-        output_key = query_params.get("output_key")
+        s3.head_object(Bucket=BUCKET, Key=output_key)
 
-        if not output_key:
-            return {
-                "statusCode": 400,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
-                },
-                "body": json.dumps({
-                    "error": "Missing required parameter: output_key"
-                })
-            }
+        # ✅ FILE EXISTS
+        return response(200, {
+            "status": "completed",
+            "output_key": output_key
+        })
 
-        try:
-            s3_client.head_object(Bucket=BUCKET, Key=output_key)
-            return {
-                "statusCode": 200,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
-                },
-                "body": json.dumps({
-                    "status": "completed",
-                    "output_key": output_key
-                })
-            }
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            return response(200, {
+                "status": "processing",
+                "output_key": output_key
+            })
 
-        except s3_client.exceptions.ClientError as e:
-            if e.response["Error"]["Code"] == "404":
-                return {
-                    "statusCode": 200,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Origin": "*"
-                    },
-                    "body": json.dumps({
-                        "status": "processing",
-                        "output_key": output_key
-                    })
-                }
-            raise
+        # other error
+        return response(500, {"error": str(e)})
 
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*"
-            },
-            "body": json.dumps({"error": str(e)})
-        }
+
+def response(code, body):
+    return {
+        "statusCode": code,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+        },
+        "body": json.dumps(body)
+    }

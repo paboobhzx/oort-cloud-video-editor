@@ -28,11 +28,24 @@ variable "sqs_queue_url" {
 variable "sqs_queue_arn" { 
     type = string 
 }
-variable "cognito_issuer_url" { 
-    type = string
-    description = "Cognito User Pool issuer URL"
-}
 variable "cognito_client_id" { 
     type = string
     description = "Cognito App Client ID"
+}
+variable "cognito_issuer_url" {
+  description = "Cognito issuer URL"
+  type        = string
+}
+variable "vpc_id" {
+  description = "VPC ID"
+  type        = string
+}
+
+variable "tags" {
+  description = "Common tags"
+  type        = map(string)
+}
+variable "private_subnet_ids" {
+  description = "Private subnet IDs for Lambda VPC"
+  type        = list(string)
 }

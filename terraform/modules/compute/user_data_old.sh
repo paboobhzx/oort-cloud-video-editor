@@ -37,9 +37,7 @@ rm -rf /tmp/ffmpeg*
 ########################################
 mkdir -p /opt/video-processor
 
-########################################
-# Environment file (THIS IS THE KEY FIX)
-########################################
+
 cat > /etc/video-processor.env <<EOF
 SQS_QUEUE_URL=${sqs_queue_url}
 RAW_BUCKET=${raw_videos_bucket}

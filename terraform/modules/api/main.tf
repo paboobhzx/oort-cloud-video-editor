@@ -31,40 +31,50 @@ resource "aws_iam_role" "lambda_role" {
 resource "aws_iam_role_policy" "lambda_policy" {
   name = "${local.function_prefix}-api-lambda-policy"
   role = aws_iam_role.lambda_role.id
+  
 
   policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:aws:logs:*:*:*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:HeadObject"
-        ]
-        Resource = [
-          "${var.raw_videos_bucket_arn}/*",
-          "${var.processed_video_bucket_arn}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage"
-        ]
-        Resource = var.sqs_queue_arn
-      }
-    ]
-  })
+  Version = "2012-10-17"
+  Statement = [
+    {
+      Effect = "Allow"
+      Action = [
+        "ec2:CreateNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DeleteNetworkInterface"
+      ]
+      Resource = "*"
+    },
+    {
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ]
+      Resource = "arn:aws:logs:*:*:*"
+    },
+    {
+      Effect = "Allow"
+      Action = [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:HeadObject"
+      ]
+      Resource = [
+        "${var.raw_videos_bucket_arn}/*",
+        "${var.processed_video_bucket_arn}/*"
+      ]
+    },
+    {
+      Effect = "Allow"
+      Action = [
+        "sqs:SendMessage"
+      ]
+      Resource = var.sqs_queue_arn
+    }
+  ]
+})
 }
 
 # ============================================
@@ -138,13 +148,18 @@ resource "aws_lambda_function" "check_status" {
   handler          = "check_status.handler"
   source_code_hash = data.archive_file.check_status.output_base64sha256
   runtime          = "python3.11"
-  timeout          = 10
+  timeout          = 30
+  memory_size = 256
 
   environment {
     variables = {
       PROCESSED_BUCKET = var.processed_videos_bucket_name
       REGION           = data.aws_region.current.name
     }
+  }
+  vpc_config { 
+    subnet_ids = var.private_subnet_ids 
+    security_group_ids = [aws_security_group.lambda.id]
   }
 }
 
@@ -172,6 +187,10 @@ resource "aws_lambda_function" "presigned_download" {
       PROCESSED_BUCKET = var.processed_videos_bucket_name
       REGION           = data.aws_region.current.name
     }
+  }
+  vpc_config { 
+    subnet_ids = var.private_subnet_ids
+    security_group_ids = [aws_security_group.lambda.id]
   }
 }
 
@@ -330,4 +349,23 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
     issuer = var.cognito_issuer_url
     audience = [var.cognito_client_id]
   }
+}
+#Security group for Lambda
+resource "aws_security_group" "lambda" { 
+  name = "${local.function_prefix}-lambda-sg"
+  description = "Security group for Lambda functions"
+  vpc_id = var.vpc_id
+  egress { 
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
+  }
+  tags = merge( 
+    var.tags,
+    { 
+      Name = "${local.function_prefix}-lambda-sg"
+    }
+  )
 }

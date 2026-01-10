@@ -1,16 +1,5 @@
-data "aws_ami" "amazon_linux_2023" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["al2023-ami-*-x86_64"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
+data "aws_ssm_parameter" "al2023_ssm" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
 # ------------------------------------------------------------
@@ -18,12 +7,12 @@ data "aws_ami" "amazon_linux_2023" {
 # ------------------------------------------------------------
 resource "aws_launch_template" "video_processor" {
   name_prefix   = "${var.project_name}-${var.environment}-processor-"
-  image_id      = data.aws_ami.amazon_linux_2023.id
+  image_id      = data.aws_ssm_parameter.al2023_ssm.value
   instance_type = var.instance_type
 
   # IAM Instance Profile 
 iam_instance_profile {
-  name = var.iam_instance_profile_name
+  name = aws_iam_instance_profile.processor.name
 }
 
 
@@ -101,13 +90,9 @@ resource "aws_autoscaling_group" "video_processors" {
   name                = "${var.project_name}-${var.environment}-processor-asg"
   vpc_zone_identifier = var.private_subnet_ids
 
-  #desired_capacity = var.desired_capacity
-  #min_size         = var.min_size
-  #max_size         = var.max_size
-
-  desired_capacity = 1
-  min_size         = 1
-  max_size         = 1
+  min_size         = 0
+  desired_capacity = 0
+  max_size         = 2
 
   health_check_type         = "EC2"
   health_check_grace_period = 300
@@ -117,7 +102,7 @@ resource "aws_autoscaling_group" "video_processors" {
       on_demand_base_capacity                  = 0
       on_demand_percentage_above_base_capacity = 0
       spot_allocation_strategy                 = "lowest-price"
-      spot_instance_pools                      = 3
+      spot_instance_pools                      = 2
     }
 
     launch_template {
@@ -126,9 +111,8 @@ resource "aws_autoscaling_group" "video_processors" {
         version            = "$Latest"
       }
 
-      override { instance_type = "t3a.small" }
       override { instance_type = "t3.small" }
-      override { instance_type = "t2.small" }
+      override { instance_type = "t3.medium" }
     }
   }
 
@@ -205,8 +189,71 @@ resource "aws_cloudwatch_metric_alarm" "sqs_queue_low" {
     QueueName = split("/", var.sqs_queue_url)[4]
   }
 }
-
-
+resource"aws_iam_role" "processor" { 
+  name = "${var.project_name}-${var.environment}-processor-role"
+  assume_role_policy = jsonencode({ 
+    Version = "2012-10-17"
+    Statement = [ 
+      { 
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = { 
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+resource "aws_iam_role_policy" "processor" { 
+  name = "${var.project_name}-${var.environment}-processor-policy"
+  role = aws_iam_role.processor.id 
+  policy = jsonencode({ 
+    Version = "2012-10-17"
+    Statement = [ 
+      { 
+        Effect = "Allow"
+        Action = [ 
+         "ssm:UpdateInstanceInformation",
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel", 
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
+          "ec2messages:AcknowledgeMessage",
+          "ec2messages:DeleteMessage",
+          "ec2messages:FailMessage",
+          "ec2messages:GetEndpoint",
+          "ec2messages:GetMessages",
+          "ec2messages:SendReply"
+        ]
+        Resource = "*"
+      },
+      { 
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = [ 
+          "${var.raw_videos_bucket_arn}/*",
+          "${var.processed_video_bucket_arn}/*"
+        ]
+      },
+      { 
+        Effect = "Allow"
+        Action = [ 
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = var.sqs_queue_arn
+      }
+    ]
+  })
+}
+resource "aws_iam_instance_profile" "processor" { 
+  name = "${var.project_name}-${var.environment}-processor-profile"
+  role = aws_iam_role.processor.name 
+}
 
 # ------------------------------------------------------------
 # Region

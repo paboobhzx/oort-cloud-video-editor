@@ -43,16 +43,16 @@ resource "aws_cognito_user_pool_client" "main" {
     user_pool_id = aws_cognito_user_pool.main.id 
     #OAuth Flows
     allowed_oauth_flows_user_pool_client = true 
-    allowed_oauth_flows = [ "code", "implicit"]
+    allowed_oauth_flows = [ "code"]
     allowed_oauth_scopes = ["email", "openid", "profile"]
-    #Callback URLS - update with your actual frontend urls
+     #Callback URLs - PKCE uses query params (code), not URL fragments
     callback_urls = [ 
-        "http://localhost:4200",
-        "http://localhost:4200/callback"
+        "http://localhost:4200/auth-callback",  # ✅ Updated for PKCE flow
+        "http://localhost:4200/login"           # ✅ Alternative
     ]
     logout_urls = [ 
-        "http://localhost:4200",
-        "http://localhost:4200/logout"
+        "http://localhost:4200/login"
+        
     ]
     #Token validity
     access_token_validity = 60 #Minutes
@@ -63,17 +63,19 @@ resource "aws_cognito_user_pool_client" "main" {
         id_token = "minutes"
         refresh_token = "days"
     }
-    #Auth flows
+    #Auth flows - PKCE doesn't need explicit "code" flow, it's implicit
     explicit_auth_flows = [ 
-        "ALLOW_USER_SRP_AUTH",
-        "ALLOW_REFRESH_TOKEN_AUTH",
-        "ALLOW_USER_PASSWORD_AUTH"
+        "ALLOW_USER_PASSWORD_AUTH",      # For password-based auth
+        "ALLOW_REFRESH_TOKEN_AUTH",      # For refreshing tokens
+        "ALLOW_USER_SRP_AUTH"            # For SRP auth
     ]
     #Prevent user existence errors
     prevent_user_existence_errors = "ENABLED"
     #Read and write attributes
     read_attributes = ["email", "email_verified"]
     write_attributes = ["email"]
+    #Generate client secret (optional, but recommended for backend calls)
+    generate_secret = false #Set to true if you need a client secret for backend
 }
 #Cognito User Po9ol Domain (for hosted UI - optional)
 resource "aws_cognito_user_pool_domain" "main" { 
@@ -86,3 +88,5 @@ resource "random_string" "cognito_domain" {
     special = false
     upper = false 
 }
+#Data source to get current region
+data "aws_region" "current" {}

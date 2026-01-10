@@ -9,84 +9,131 @@ export class Auth {
   private readonly ID_TOKEN_KEY = 'id_token';
   private readonly REFRESH_TOKEN_KEY = 'refresh_token';
   private readonly CODE_VERIFIER_KEY = 'pkce_code_verifier';
+  private readonly STATE_KEY = 'pkce_state';
 
   /**
    * Generate PKCE code verifier (43-128 characters)
    */
   private generateCodeVerifier(): string {
+    console.log('🔧 Generating code verifier...');
     const array = new Uint8Array(32);
     crypto.getRandomValues(array);
-    return btoa(String.fromCharCode.apply(null, Array.from(array)))
+    const verifier = btoa(String.fromCharCode.apply(null, Array.from(array)))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=/g, '');
+    console.log('✅ Code verifier generated, length:', verifier.length);
+    return verifier;
   }
 
   /**
-   * Generate PKCE code challenge from verifier
+   * Generate random state parameter
+   */
+  private generateState(): string {
+    console.log('🔧 Generating state...');
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    const state = btoa(String.fromCharCode.apply(null, Array.from(array)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    console.log('✅ State generated, length:', state.length);
+    return state;
+  }
+
+  /**
+   * Generate PKCE code challenge
    */
   private async generateCodeChallenge(verifier: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-    return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+    console.log('🔧 Generating code challenge from verifier...');
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+      const digest = await crypto.subtle.digest('SHA-256', data);
+      const challenge = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+      console.log('✅ Code challenge generated, length:', challenge.length);
+      return challenge;
+    } catch (error) {
+      console.error('❌ Failed to generate code challenge:', error);
+      throw error;
+    }
   }
 
   /**
-   * Builds the Cognito authorization URL using Authorization Code Grant
+   * Build login URL
    */
   async buildLoginUrl(): Promise<string> {
-    const config = (environment as any).cognito;
+    console.log('🔐 Building login URL...');
 
-    if (!config?.domain || !config?.clientId || !config?.redirecturi) {
-      throw new Error('Invalid Cognito configuration');
+    try {
+      const config = (environment as any).cognito;
+      console.log('📋 Cognito config:', {
+        domain: config?.domain,
+        clientId: config?.clientId,
+        redirectUri: config?.redirecturi,
+        scope: config?.scope,
+      });
+
+      if (!config?.domain || !config?.clientId || !config?.redirecturi) {
+        throw new Error('Invalid Cognito configuration: missing domain, clientId, or redirecturi');
+      }
+
+      const { domain, clientId, redirecturi, scope } = config;
+
+      // Generate PKCE
+      const codeVerifier = this.generateCodeVerifier();
+      const codeChallenge = await this.generateCodeChallenge(codeVerifier);
+      const state = this.generateState();
+
+      console.log('💾 Storing PKCE parameters in localStorage...');
+      localStorage.setItem(this.CODE_VERIFIER_KEY, codeVerifier);
+      localStorage.setItem(this.STATE_KEY, state);
+      console.log('✅ Stored code verifier:', localStorage.getItem(this.CODE_VERIFIER_KEY) ? 'YES' : 'NO');
+      console.log('✅ Stored state:', localStorage.getItem(this.STATE_KEY) ? 'YES' : 'NO');
+
+      // Build URL
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: redirecturi,
+        scope,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        state,
+      });
+
+      const loginUrl = `https://${domain}/oauth2/authorize?${params.toString()}`;
+      console.log('✅ Login URL built:', loginUrl.substring(0, 100) + '...');
+      return loginUrl;
+    } catch (error) {
+      console.error('❌ Error building login URL:', error);
+      throw error;
     }
-
-    const { domain, clientId, redirecturi, scope } = config;
-
-    // Generate PKCE parameters
-    const codeVerifier = this.generateCodeVerifier();
-    const codeChallenge = await this.generateCodeChallenge(codeVerifier);
-
-    // Store code verifier for later use (when exchanging code for tokens)
-    localStorage.setItem(this.CODE_VERIFIER_KEY, codeVerifier);
-
-    const params = new URLSearchParams({
-      response_type: 'code', // ✅ Changed from 'token' to 'code'
-      client_id: clientId,
-      redirect_uri: redirecturi,
-      scope,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256', // SHA-256
-    });
-
-    return `https://${domain}/oauth2/authorize?${params.toString()}`;
   }
 
   /**
-   * Starts the Cognito login flow
+   * Start login flow
    */
   async login(): Promise<void> {
+    console.log('🔐 Login button clicked');
     try {
+      console.log('🔄 Building login URL...');
       const loginUrl = await this.buildLoginUrl();
-      console.log('✅ Login URL built successfully');
+      console.log('✅ Login URL ready');
 
-      setTimeout(() => {
-        console.log('🔗 Navigating to Cognito...');
-        window.location.assign(loginUrl);
-      }, 0);
+      console.log('📤 Redirecting to Cognito...');
+      window.location.assign(loginUrl);
     } catch (error) {
-      console.error('❌ Login failed:', error);
-      alert('Login configuration error. Check console for details.');
+      console.error('❌ Login error:', error);
+      alert('Login failed: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
   /**
-   * Exchange authorization code for tokens
-   * This is called after Cognito redirects back with the 'code' parameter
+   * Exchange code for tokens
    */
   async exchangeCodeForTokens(code: string): Promise<void> {
     try {
@@ -94,10 +141,12 @@ export class Auth {
       const codeVerifier = localStorage.getItem(this.CODE_VERIFIER_KEY);
 
       if (!codeVerifier) {
-        throw new Error('Code verifier not found. Login may have been interrupted.');
+        throw new Error('Code verifier not found');
       }
 
       const tokenUrl = `https://${config.domain}/oauth2/token`;
+
+      console.log('🔄 Exchanging code for tokens...');
 
       const response = await fetch(tokenUrl, {
         method: 'POST',
@@ -119,20 +168,25 @@ export class Auth {
       }
 
       const data = await response.json();
+      console.log('✅ Token response received');
 
-      // Store tokens
-      if (data.access_token) {
-        this.setToken(data.access_token);
-      }
       if (data.id_token) {
         localStorage.setItem(this.ID_TOKEN_KEY, data.id_token);
-      }
-      if (data.refresh_token) {
-        localStorage.setItem(this.REFRESH_TOKEN_KEY, data.refresh_token);
+        console.log('✅ ID token saved');
       }
 
-      // Clean up code verifier
+      if (data.access_token) {
+        localStorage.setItem(this.TOKEN_KEY, data.access_token);
+        console.log('✅ Access token saved');
+      }
+
+      if (data.refresh_token) {
+        localStorage.setItem(this.REFRESH_TOKEN_KEY, data.refresh_token);
+        console.log('✅ Refresh token saved');
+      }
+
       localStorage.removeItem(this.CODE_VERIFIER_KEY);
+      localStorage.removeItem(this.STATE_KEY);
 
       console.log('✅ Tokens obtained successfully');
     } catch (error) {
@@ -141,67 +195,27 @@ export class Auth {
     }
   }
 
-  /**
-   * Persist access token
-   */
-  setToken(token: string): void {
-    try {
-      localStorage.setItem(this.TOKEN_KEY, token);
-      console.log('✅ Access token saved to localStorage');
-    } catch (error) {
-      console.error('❌ Failed to save token:', error);
-    }
-  }
-
-  /**
-   * Retrieve stored access token
-   */
   getToken(): string | null {
-    try {
-      return localStorage.getItem(this.TOKEN_KEY);
-    } catch (error) {
-      console.error('❌ Failed to retrieve token:', error);
-      return null;
-    }
+    return localStorage.getItem(this.TOKEN_KEY);
   }
 
-  /**
-   * Retrieve stored ID token
-   */
   getIdToken(): string | null {
-    try {
-      return localStorage.getItem(this.ID_TOKEN_KEY);
-    } catch (error) {
-      console.error('❌ Failed to retrieve ID token:', error);
-      return null;
-    }
+    return localStorage.getItem(this.ID_TOKEN_KEY);
   }
 
-  /**
-   * Check authentication status
-   */
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    return !!(this.getToken() || this.getIdToken());
   }
 
-  /**
-   * Clear all tokens
-   */
   clearTokens(): void {
-    try {
-      localStorage.removeItem(this.TOKEN_KEY);
-      localStorage.removeItem(this.ID_TOKEN_KEY);
-      localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-      localStorage.removeItem(this.CODE_VERIFIER_KEY);
-      console.log('✅ All tokens cleared');
-    } catch (error) {
-      console.error('❌ Failed to clear tokens:', error);
-    }
+    localStorage.removeItem(this.TOKEN_KEY);
+    localStorage.removeItem(this.ID_TOKEN_KEY);
+    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
+    localStorage.removeItem(this.CODE_VERIFIER_KEY);
+    localStorage.removeItem(this.STATE_KEY);
+    console.log('✅ All tokens cleared');
   }
 
-  /**
-   * Logout via Cognito Hosted UI
-   */
   logout(): void {
     try {
       const config = (environment as any).cognito;
@@ -220,10 +234,8 @@ export class Auth {
 
       this.clearTokens();
 
-      setTimeout(() => {
-        console.log('🔗 Navigating to Cognito logout...');
-        window.location.assign(`https://${domain}/logout?${params.toString()}`);
-      }, 0);
+      console.log('🔗 Navigating to Cognito logout...');
+      window.location.assign(`https://${domain}/logout?${params.toString()}`);
     } catch (error) {
       console.error('❌ Logout failed:', error);
     }
